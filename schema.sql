@@ -1,29 +1,25 @@
--- Run this file first to create the database and tables
+-- PostgreSQL schema for orders_db
+-- Run this in your Render PostgreSQL database using the Render shell or psql
 
-CREATE DATABASE IF NOT EXISTS orders_db;
-USE orders_db;
-
-CREATE TABLE users (
-  user_id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS users (
+  user_id   SERIAL PRIMARY KEY,
   full_name VARCHAR(100) NOT NULL,
-  email VARCHAR(100) NOT NULL UNIQUE,
-  mobile VARCHAR(15) NOT NULL UNIQUE,
-  status ENUM('Active', 'Inactive') DEFAULT 'Active'
+  email     VARCHAR(100) NOT NULL UNIQUE,
+  mobile    VARCHAR(15)  NOT NULL UNIQUE,
+  status    VARCHAR(10)  NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive'))
 );
 
-CREATE TABLE orders (
-  order_id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  order_date DATE NOT NULL,
-  total_amount DECIMAL(10, 2) NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
+CREATE TABLE IF NOT EXISTS orders (
+  order_id     SERIAL PRIMARY KEY,
+  user_id      INT            NOT NULL REFERENCES users(user_id),
+  order_date   DATE           NOT NULL,
+  total_amount DECIMAL(10, 2) NOT NULL
 );
 
-CREATE TABLE order_items (
-  item_id INT AUTO_INCREMENT PRIMARY KEY,
-  order_id INT NOT NULL,
-  product_name VARCHAR(100) NOT NULL,
-  quantity INT NOT NULL,
-  price DECIMAL(10, 2) NOT NULL,
-  FOREIGN KEY (order_id) REFERENCES orders(order_id)
+CREATE TABLE IF NOT EXISTS order_items (
+  item_id      SERIAL PRIMARY KEY,
+  order_id     INT            NOT NULL REFERENCES orders(order_id),
+  product_name VARCHAR(100)   NOT NULL,
+  quantity     INT            NOT NULL,
+  price        DECIMAL(10, 2) NOT NULL
 );

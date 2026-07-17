@@ -41,14 +41,14 @@ router.post('/orders', async (req, res) => {
     return res.status(400).json({ error: 'Duplicate product found in the same order' });
   }
 
-  const connection = await pool.getConnection();
+  const client = await pool.connect();
 
   try {
-    await connection.beginTransaction();
+    await client.query('BEGIN');
 
-    // check if user already exists by email
-    const [existingUsers] = await connection.query(
-      'SELECT * FROM users WHERE email = ? OR mobile = ?',
+    // check if user already exists by email or mobile
+    const { rows: existingUsers } = await client.query(
+      'SELECT * FROM users WHERE email = $1 OR mobile = $2',
       [user.email, user.mobile]
     );
 
@@ -59,40 +59,40 @@ router.post('/orders', async (req, res) => {
 
       // if email matches but mobile is different (or vice versa), block it
       if (existingUser.email === user.email && existingUser.mobile !== user.mobile) {
-        await connection.rollback();
+        await client.query('ROLLBACK');
         return res.status(409).json({ error: 'This email is already registered with a different mobile number' });
       }
       if (existingUser.mobile === user.mobile && existingUser.email !== user.email) {
-        await connection.rollback();
+        await client.query('ROLLBACK');
         return res.status(409).json({ error: 'This mobile number is already registered with a different email' });
       }
 
       userId = existingUser.user_id;
     } else {
-      const [result] = await connection.query(
-        'INSERT INTO users (full_name, email, mobile) VALUES (?, ?, ?)',
+      const { rows: insertedUsers } = await client.query(
+        'INSERT INTO users (full_name, email, mobile) VALUES ($1, $2, $3) RETURNING user_id',
         [user.full_name, user.email, user.mobile]
       );
-      userId = result.insertId;
+      userId = insertedUsers[0].user_id;
     }
 
     // total is always calculated on the server, never trusted from the client
     const totalAmount = order.items.reduce((sum, item) => sum + item.quantity * item.price, 0);
 
-    const [orderResult] = await connection.query(
-      'INSERT INTO orders (user_id, order_date, total_amount) VALUES (?, ?, ?)',
+    const { rows: insertedOrders } = await client.query(
+      'INSERT INTO orders (user_id, order_date, total_amount) VALUES ($1, $2, $3) RETURNING order_id',
       [userId, order.order_date, totalAmount]
     );
-    const orderId = orderResult.insertId;
+    const orderId = insertedOrders[0].order_id;
 
     for (const item of order.items) {
-      await connection.query(
-        'INSERT INTO order_items (order_id, product_name, quantity, price) VALUES (?, ?, ?, ?)',
+      await client.query(
+        'INSERT INTO order_items (order_id, product_name, quantity, price) VALUES ($1, $2, $3, $4)',
         [orderId, item.product_name, item.quantity, item.price]
       );
     }
 
-    await connection.commit();
+    await client.query('COMMIT');
 
     res.status(201).json({
       message: 'Order created successfully',
@@ -102,11 +102,11 @@ router.post('/orders', async (req, res) => {
       item_count: order.items.length,
     });
   } catch (err) {
-    await connection.rollback();
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Something went wrong while creating the order' });
   } finally {
-    connection.release();
+    client.release();
   }
 });
 
@@ -116,7 +116,7 @@ router.get('/orders/:id', async (req, res) => {
   const orderId = req.params.id;
 
   try {
-    const [rows] = await pool.query(
+    const { rows } = await pool.query(
       `SELECT 
         u.user_id, u.full_name, u.email, u.mobile, u.status,
         o.order_id, o.order_date, o.total_amount,
@@ -124,7 +124,7 @@ router.get('/orders/:id', async (req, res) => {
       FROM orders o
       JOIN users u ON o.user_id = u.user_id
       JOIN order_items oi ON oi.order_id = o.order_id
-      WHERE o.order_id = ?`,
+      WHERE o.order_id = $1`,
       [orderId]
     );
 
@@ -167,7 +167,7 @@ router.get('/orders/:id', async (req, res) => {
 // Fetches all orders with user information and item counts.
 router.get('/orders', async (req, res) => {
   try {
-    const [rows] = await pool.query(
+    const { rows } = await pool.query(
       `SELECT 
         o.order_id, 
         o.order_date, 

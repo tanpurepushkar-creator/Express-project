@@ -23,8 +23,8 @@ router.post('/users/validate', async (req, res) => {
   }
 
   try {
-    const [users] = await pool.query(
-      'SELECT * FROM users WHERE email = ? OR mobile = ?',
+    const { rows: users } = await pool.query(
+      'SELECT * FROM users WHERE email = $1 OR mobile = $2',
       [email, mobile]
     );
 

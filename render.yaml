@@ -1,0 +1,22 @@
+# render.yaml — Render Blueprint for orders-api
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: orders-api
+    runtime: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: orders-db
+          property: connectionString
+
+databases:
+  - name: orders-db
+    databaseName: orders_db
+    user: orders_user
+    plan: free
